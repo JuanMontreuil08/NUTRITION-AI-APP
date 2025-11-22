@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     const timeout = setTimeout(() => controller.abort(), 30000)
 
     const response = await fetch(
-      "https://71e032c855be.ngrok-free.app/qa",
+      "https://api-nutrition-759047338260.us-west4.run.app/qa",
       {
         method: "POST",
         body: apiFormData,

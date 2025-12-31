@@ -130,12 +130,8 @@ const handleAnalyze = async (e: React.FormEvent) => {
     const { answer } = formatMultimodalAnswer(response)
     setAnswer(answer)
     
-    // Limpiar inputs después de éxito
+    // Limpiar solo la pregunta (los archivos se mantienen para reutilizar)
     setQuestion("")
-    setFiles([])
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ""
-    }
     console.log(`✅ Análisis completado`)
   } catch (err: any) {
     console.error(`❌ Error:`, err.message)
@@ -143,6 +139,14 @@ const handleAnalyze = async (e: React.FormEvent) => {
   } finally {
     setLoading(false)
   }
+}
+
+const handleClearFiles = () => {
+  setFiles([])
+  if (fileInputRef.current) {
+    fileInputRef.current.value = ""
+  }
+  console.log("🗑️ Archivos limpios")
 }
 
 
@@ -234,13 +238,27 @@ const handleAnalyze = async (e: React.FormEvent) => {
             <p className="text-sm text-muted-foreground mb-1">
               Archivos (video / imagen / PDF) - Puedes seleccionar múltiples
             </p>
-            <Input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept="video/*,image/*,application/pdf"
-              onChange={handleFileChange}
-            />
+            <div className="flex gap-2">
+              <Input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="video/*,image/*,application/pdf"
+                onChange={handleFileChange}
+                className="flex-1"
+              />
+              {files.length > 0 && (
+                <Button
+                  type="button"
+                  onClick={handleClearFiles}
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                >
+                  🗑️ Limpiar
+                </Button>
+              )}
+            </div>
             
             {/* Lista de archivos seleccionados */}
             {files.length > 0 && (

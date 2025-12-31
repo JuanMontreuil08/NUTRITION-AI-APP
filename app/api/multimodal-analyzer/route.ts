@@ -1,4 +1,23 @@
 // app/api/multimodal-analyzer/route.ts
+// API para análisis multimodal (imágenes, videos, PDFs) con respuestas nutricionales
+
+interface MultimodalMetadata {
+  question?: string
+  media_count?: number
+  analysis_types?: string[]
+  validation_passed?: boolean
+  answer_length?: number
+  execution_logs?: number
+  processing_time_ms: number
+}
+
+interface MultimodalResponse {
+  ok: boolean
+  answer?: string
+  metadata?: MultimodalMetadata
+  error?: string
+  detail?: any
+}
 
 export async function OPTIONS() {
   return new Response(null, {
@@ -13,13 +32,37 @@ export async function OPTIONS() {
 
 export const runtime = "nodejs"
 
+/**
+ * POST endpoint para procesar contenido multimodal
+ * Acepta: pregunta + archivo (imagen, video, PDF)
+ * Devuelve: respuesta del API de IA + metadata
+ */
 export async function POST(request: Request) {
+  const startTime = Date.now()
+
   try {
+    // Extraer datos del formulario
     const formData = await request.formData()
-
     const question = String(formData.get("question") ?? "").trim()
-    const file = formData.get("file")
+    
+    // Soportar ambas formas de enviar archivos: "file" o "files"
+    let files: File[] = []
+    
+    // Intentar obtener como "files" (múltiple)
+    const filesArray = formData.getAll("files")
+    if (filesArray && filesArray.length > 0) {
+      files = filesArray.filter((f) => f instanceof File) as File[]
+    }
+    
+    // Si no hay "files", intentar obtener como "file" (singular)
+    if (files.length === 0) {
+      const singleFile = formData.get("file")
+      if (singleFile instanceof File) {
+        files = [singleFile]
+      }
+    }
 
+    // Validaciones
     if (!question) {
       return Response.json(
         { ok: false, error: "La pregunta es obligatoria" },
@@ -27,80 +70,148 @@ export async function POST(request: Request) {
       )
     }
 
-    if (!(file instanceof Blob)) {
+    if (files.length === 0) {
       return Response.json(
         { ok: false, error: "El archivo es obligatorio" },
         { status: 400 }
       )
     }
 
-    // Armamos el FormData para FastAPI
+    console.log(`[multimodal-analyzer] Procesando ${files.length} archivo(s)`)
+    files.forEach((f) => {
+      console.log(`  - ${f.name} (${(f.size / 1024).toFixed(2)}KB)`)
+    })
+    console.log(`[multimodal-analyzer] Pregunta: ${question.slice(0, 50)}...`)
+
+    // Construir FormData para FastAPI
     const apiFormData = new FormData()
     apiFormData.append("question", question)
     apiFormData.append("use_files_api", "false")
-    apiFormData.append(
-      "files",
-      file,
-      (file as File).name ?? "upload.bin"
-    )
+    
+    // Agregar todos los archivos como "files"
+    for (const file of files) {
+      apiFormData.append("files", file, file.name)
+    }
 
+    // Setup para timeout (120 segundos para archivos grandes)
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 30000)
+    const timeoutId = setTimeout(() => controller.abort(), 120000)
 
-    const response = await fetch(
-      "https://api-nutrition-759047338260.us-west4.run.app/qa",
-      {
+    let response: Response
+    try {
+      const apiUrl = process.env.MULTIMODAL_API_URL
+      
+      if (!apiUrl) {
+        return Response.json(
+          {
+            ok: false,
+            error: "MULTIMODAL_API_URL no está configurada",
+            hint: "Configura la variable de entorno MULTIMODAL_API_URL en .env.local",
+            example: "MULTIMODAL_API_URL=http://localhost:8000/qa",
+          },
+          { status: 500 }
+        )
+      }
+
+      console.log(`[multimodal-analyzer] 🚀 Llamando API: ${apiUrl}`)
+      
+      response = await fetch(apiUrl, {
         method: "POST",
         body: apiFormData,
         signal: controller.signal,
-      }
-    )
+      })
+    } finally {
+      clearTimeout(timeoutId)
+    }
 
-    clearTimeout(timeout)
-
+    // Intentar parsear como JSON
     const rawText = await response.text()
-    console.log("[multimodal-analyzer] status:", response.status)
-    console.log("[multimodal-analyzer] RAW RESPONSE (primeros 300 chars):")
-    console.log(rawText.slice(0, 300))
+    console.log(`[multimodal-analyzer] Status HTTP: ${response.status}`)
+    console.log(`[multimodal-analyzer] Content-Type: ${response.headers.get("content-type")}`)
+    console.log(`[multimodal-analyzer] Response length: ${rawText.length} chars`)
+    console.log(`[multimodal-analyzer] Response preview: ${rawText.slice(0, 500)}`)
+    
+    let apiResponse: MultimodalResponse
 
-    // Si FastAPI devolvió HTML o algo que no es JSON
-    let parsed: any
     try {
-      parsed = JSON.parse(rawText)
-    } catch (e) {
+      apiResponse = JSON.parse(rawText)
+    } catch (parseError) {
+      console.error("[multimodal-analyzer] ❌ Error parseando JSON")
+      console.error("[multimodal-analyzer] Raw response:", rawText.slice(0, 1000))
+      
       return Response.json(
         {
           ok: false,
-          error: "FastAPI devolvió una respuesta no JSON",
+          error: "El API devolvió una respuesta no JSON",
           status: response.status,
-          bodySnippet: rawText.slice(0, 500),
+          contentType: response.headers.get("content-type"),
+          bodySnippet: rawText.slice(0, 1000),
+          hint: "Verifica que el servidor FastAPI esté activo en la URL correcta",
         },
-        { status: 500 }
+        { status: 502 }
       )
     }
 
-    // Si FastAPI devolvió error, lo propagamos pero igual como JSON
+    console.log(`[multimodal-analyzer] Status: ${response.status} | Respuesta: ${apiResponse.ok ? "OK" : "ERROR"}`)
+    
+    // Si el código HTTP es error
     if (!response.ok) {
+      console.error("[multimodal-analyzer] HTTP Error:", apiResponse)
       return Response.json(
         {
           ok: false,
-          error: `FastAPI devolvió status ${response.status}`,
-          detail: parsed,
+          error: `El API devolvió status ${response.status}`,
+          detail: apiResponse,
         },
         { status: response.status }
       )
     }
 
-    // Éxito: devolvemos el JSON del backend
-    return Response.json(parsed, {
+    // Si el API devolvió ok=false pero HTTP 200
+    if (apiResponse.ok === false) {
+      console.error("[multimodal-analyzer] API Logic Error:", apiResponse.error)
+      return Response.json(apiResponse, { status: 400 })
+    }
+
+    // Éxito: enriquecer respuesta con metadata interna
+    const processingTime = Date.now() - startTime
+    const enrichedResponse: MultimodalResponse = {
+      ok: true,
+      answer: apiResponse.answer,
+      metadata: {
+        ...(apiResponse.metadata || {}),
+        processing_time_ms: (apiResponse.metadata?.processing_time_ms ?? 0) + processingTime,
+      } as MultimodalMetadata,
+    }
+
+    return Response.json(enrichedResponse, {
       status: 200,
       headers: { "Access-Control-Allow-Origin": "*" },
     })
   } catch (error) {
-    console.error("[multimodal-analyzer] ERROR:", error)
-    const msg = error instanceof Error ? error.message : "Error desconocido"
+    const processingTime = Date.now() - startTime
+    const errorMessage = error instanceof Error ? error.message : "Error desconocido"
+    
+    console.error("[multimodal-analyzer] EXCEPCIÓN:", errorMessage)
+
+    // Detectar timeout
+    if (errorMessage.includes("abort") || errorMessage.includes("timeout")) {
+      return Response.json(
+        {
+          ok: false,
+          error: "El procesamiento tardó demasiado (timeout de 120s). Intenta con un archivo más pequeño.",
+          detail: errorMessage,
+        },
+        { status: 408 }
+      )
+    }
+
     return Response.json(
-      { ok: false, error: `Error procesando contenido multimodal: ${msg}` },
+      {
+        ok: false,
+        error: `Error procesando contenido: ${errorMessage}`,
+        processingTime,
+      },
       { status: 500 }
     )
   }

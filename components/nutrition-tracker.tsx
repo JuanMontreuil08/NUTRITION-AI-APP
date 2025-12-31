@@ -1,11 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { analyzeMultimodal, formatMultimodalAnswer } from "@/lib/multimodal-service"
+import MarkdownResponse from "@/components/markdown-response"
 
 interface NutritionData {
   weight: number
@@ -77,6 +79,7 @@ export default function NutritionTracker() {
   }
 
   // ⬇️ Estado y lógica para el servicio multimodal
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [question, setQuestion] = useState("")
   const [file, setFile] = useState<File | null>(null)
   const [answer, setAnswer] = useState<string | null>(null)
@@ -86,6 +89,9 @@ export default function NutritionTracker() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
     setFile(f || null)
+    if (f) {
+      console.log(`📁 Archivo seleccionado: ${f.name} (${(f.size / 1024).toFixed(2)}KB)`)
+    }
   }
 
 const handleAnalyze = async (e: React.FormEvent) => {
@@ -105,44 +111,21 @@ const handleAnalyze = async (e: React.FormEvent) => {
 
   try {
     setLoading(true)
-
-    const formData = new FormData()
-    formData.append("question", question)
-    formData.append("file", file)
-
-    const res = await fetch("/api/multimodal-analyzer", {
-      method: "POST",
-      body: formData,
-    })
-
-    // ⬇️ Nuevo: manejar JSON vs HTML
-    const contentType = res.headers.get("content-type") || ""
-    let data: any
-
-    if (contentType.includes("application/json")) {
-      data = await res.json()
-    } else {
-      const text = await res.text()
-      setError(
-        `La API devolvió una respuesta no JSON: ${text.slice(0, 200)}...`
-      )
-      return
+    console.log(`🚀 Iniciando análisis...`)
+    const response = await analyzeMultimodal(file, question)
+    const { answer } = formatMultimodalAnswer(response)
+    setAnswer(answer)
+    
+    // Limpiar inputs después de éxito
+    setQuestion("")
+    setFile(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
     }
-
-    if (!res.ok || data?.ok === false) {
-      setError(
-        data?.error ||
-          "Ocurrió un error al procesar el contenido (respuesta de la API)."
-      )
-      return
-    }
-
-    // FastAPI devuelve algo como { ok: true, answer: "..." }
-    setAnswer(data.answer ?? JSON.stringify(data, null, 2))
+    console.log(`✅ Análisis completado`)
   } catch (err: any) {
-    setError(
-      err?.message || "Error inesperado al llamar al analizador multimodal."
-    )
+    console.error(`❌ Error:`, err.message)
+    setError(err?.message || "Error inesperado al analizar el contenido.")
   } finally {
     setLoading(false)
   }
@@ -238,10 +221,16 @@ const handleAnalyze = async (e: React.FormEvent) => {
               Archivo (video / imagen / PDF)
             </p>
             <Input
+              ref={fileInputRef}
               type="file"
               accept="video/*,image/*,application/pdf"
               onChange={handleFileChange}
             />
+            {file && (
+              <p className="text-xs text-muted-foreground mt-1">
+                ✓ {file.name} ({(file.size / 1024).toFixed(2)}KB)
+              </p>
+            )}
           </div>
 
           {error && (
@@ -257,8 +246,10 @@ const handleAnalyze = async (e: React.FormEvent) => {
 
         {answer && (
           <div className="mt-6">
-            <p className="text-sm text-muted-foreground mb-1">Respuesta:</p>
-            <p className="whitespace-pre-wrap text-sm">{answer}</p>
+            <MarkdownResponse 
+              content={answer} 
+              title="Resultado del Análisis"
+            />
           </div>
         )}
       </Card>

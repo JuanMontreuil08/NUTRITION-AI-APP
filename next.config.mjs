@@ -1,8 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -13,7 +10,7 @@ const nextConfig = {
   // 👇 AUMENTA EL LÍMITE DEL BODY
   experimental: {
     serverActions: {
-      bodySizeLimit: "80mb", // súbelo a 50mb si tus videos son grandes
+      bodySizeLimit: "150mb",
     },
   },
 }

@@ -81,16 +81,30 @@ export default function NutritionTracker() {
   // ⬇️ Estado y lógica para el servicio multimodal
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [question, setQuestion] = useState("")
-  const [file, setFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<File[]>([])
   const [answer, setAnswer] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0]
-    setFile(f || null)
-    if (f) {
-      console.log(`📁 Archivo seleccionado: ${f.name} (${(f.size / 1024).toFixed(2)}KB)`)
+    const selectedFiles = e.target.files
+    if (selectedFiles) {
+      const fileArray = Array.from(selectedFiles)
+      setFiles(fileArray)
+      console.log(`📁 ${fileArray.length} archivo(s) seleccionado(s):`)
+      fileArray.forEach((f) => {
+        console.log(`   - ${f.name} (${(f.size / 1024).toFixed(2)}KB)`)
+      })
+    }
+  }
+
+  const handleRemoveFile = (index: number) => {
+    setFiles(files.filter((_, i) => i !== index))
+    if (files.length === 1) {
+      // Si era el último archivo, limpiar el input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
     }
   }
 
@@ -104,21 +118,21 @@ const handleAnalyze = async (e: React.FormEvent) => {
     return
   }
 
-  if (!file) {
-    setError("Por favor selecciona un archivo (video, imagen o PDF).")
+  if (files.length === 0) {
+    setError("Por favor selecciona al menos un archivo (video, imagen o PDF).")
     return
   }
 
   try {
     setLoading(true)
-    console.log(`🚀 Iniciando análisis...`)
-    const response = await analyzeMultimodal(file, question)
+    console.log(`🚀 Iniciando análisis de ${files.length} archivo(s)...`)
+    const response = await analyzeMultimodal(files, question)
     const { answer } = formatMultimodalAnswer(response)
     setAnswer(answer)
     
     // Limpiar inputs después de éxito
     setQuestion("")
-    setFile(null)
+    setFiles([])
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
@@ -218,18 +232,42 @@ const handleAnalyze = async (e: React.FormEvent) => {
 
           <div>
             <p className="text-sm text-muted-foreground mb-1">
-              Archivo (video / imagen / PDF)
+              Archivos (video / imagen / PDF) - Puedes seleccionar múltiples
             </p>
             <Input
               ref={fileInputRef}
               type="file"
+              multiple
               accept="video/*,image/*,application/pdf"
               onChange={handleFileChange}
             />
-            {file && (
-              <p className="text-xs text-muted-foreground mt-1">
-                ✓ {file.name} ({(file.size / 1024).toFixed(2)}KB)
-              </p>
+            
+            {/* Lista de archivos seleccionados */}
+            {files.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground">
+                  {files.length} archivo(s) seleccionado(s):
+                </p>
+                <div className="space-y-1">
+                  {files.map((f, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between bg-muted p-2 rounded text-xs"
+                    >
+                      <span>
+                        📄 {f.name} ({(f.size / 1024).toFixed(2)}KB)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveFile(idx)}
+                        className="text-destructive hover:text-destructive/80 font-bold"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
 

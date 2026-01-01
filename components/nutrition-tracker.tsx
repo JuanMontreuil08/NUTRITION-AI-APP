@@ -345,59 +345,63 @@ const handleClearFiles = () => {
     <div className="space-y-8">
       {/* Header de Bienvenida */}
       {!showOnlyAnalyzer && (
-        <div className="bg-gradient-to-r from-accent/20 to-accent/10 rounded-lg p-6 border border-accent/30">
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
+        <div className="bg-gradient-to-br from-primary/15 via-accent/10 to-secondary/15 rounded-2xl p-4 sm:p-8 border border-primary/30 shadow-lg hover:shadow-xl transition-all duration-300">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex-1 min-w-0">
               {editingName ? (
-                <div className="flex gap-2 items-center mb-2">
+                <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center mb-2">
                   <input
                     type="text"
                     value={userName}
                     onChange={(e) => setUserName(e.target.value)}
-                    className="text-3xl font-bold bg-background border rounded px-3 py-1"
+                    className="text-2xl sm:text-3xl font-bold bg-background border rounded px-3 py-1 w-full sm:w-auto"
                     autoFocus
                   />
-                  <Button
-                    onClick={async () => {
-                      await updateUserName(userName)
-                      setEditingName(false)
-                    }}
-                    size="sm"
-                    variant="default"
-                  >
-                    ✓
-                  </Button>
-                  <Button
-                    onClick={() => setEditingName(false)}
-                    size="sm"
-                    variant="outline"
-                  >
-                    ✕
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={async () => {
+                        await updateUserName(userName)
+                        setEditingName(false)
+                      }}
+                      size="sm"
+                      variant="default"
+                    >
+                      ✓
+                    </Button>
+                    <Button
+                      onClick={() => setEditingName(false)}
+                      size="sm"
+                      variant="outline"
+                    >
+                      ✕
+                    </Button>
+                  </div>
                 </div>
               ) : (
-                <div className="flex gap-2 items-center">
-                  <h1 className="text-3xl font-bold text-foreground">
-                    ¡Hola, {userName}! 👋
-                  </h1>
-                  <Button
-                    onClick={() => setEditingName(true)}
-                    size="sm"
-                    variant="ghost"
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    ✏️
-                  </Button>
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2 items-start sm:items-center flex-wrap">
+                    <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent break-words">
+                      ¡Hola, {userName}! 👋
+                    </h1>
+                    <Button
+                      onClick={() => setEditingName(true)}
+                      size="sm"
+                      variant="ghost"
+                      className="text-muted-foreground hover:text-foreground flex-shrink-0"
+                    >
+                      ✏️
+                    </Button>
+                  </div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    {new Date().toLocaleDateString("es-ES", {
+                      weekday: "long",
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })}
+                  </p>
                 </div>
               )}
-              <p className="text-sm text-muted-foreground mt-1">
-                {new Date().toLocaleDateString("es-ES", {
-                  weekday: "long",
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </p>
             </div>
           </div>
         </div>
@@ -617,18 +621,20 @@ const handleClearFiles = () => {
       {/* Sección de Nutrición (visible solo si no es analyzer) */}
       {!showOnlyAnalyzer && (
         <div>
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-foreground">
-              Today&apos;s Nutrition (Inicia en 0)
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-6">
+            <h2 className="text-xl sm:text-2xl font-bold text-foreground">
+              Today&apos;s Nutrition <span className="text-sm sm:text-base text-muted-foreground">(Inicia en 0)</span>
             </h2>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-shrink-0">
               {!showNutritionForm && (
                 <Button
                   onClick={() => setShowNutritionForm(true)}
                   variant="outline"
                   size="sm"
+                  className="text-xs sm:text-sm px-2 sm:px-4"
                 >
-                  ➕ Registrar Comida
+                  <span className="hidden sm:inline">➕ Registrar Comida</span>
+                  <span className="sm:hidden">➕</span>
                 </Button>
               )}
               {!editNutritionMode && (
@@ -636,8 +642,10 @@ const handleClearFiles = () => {
                   onClick={() => setEditNutritionMode(true)}
                   variant="outline"
                   size="sm"
+                  className="text-xs sm:text-sm px-2 sm:px-4"
                 >
-                  ✏️ Editar
+                  <span className="hidden sm:inline">✏️ Editar</span>
+                  <span className="sm:hidden">✏️</span>
                 </Button>
               )}
             </div>

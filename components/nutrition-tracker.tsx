@@ -1,12 +1,14 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { analyzeMultimodal, formatMultimodalAnswer } from "@/lib/multimodal-service"
+import { getUserMetrics, saveUserMetrics } from "@/lib/user-metrics-service"
+import { getTodayNutrition, saveTodayNutrition } from "@/lib/daily-nutrition-service"
 import MarkdownResponse from "@/components/markdown-response"
 
 interface NutritionData {
@@ -23,25 +25,100 @@ interface NutritionTrackerProps {
 }
 
 export default function NutritionTracker({ showOnlyAnalyzer = false }: NutritionTrackerProps) {
-  const [data] = useState<NutritionData>({
+  const [data, setData] = useState<NutritionData>({
     weight: 75,
     height: 180,
-    calories: 1850,
-    protein: 120,
-    carbs: 200,
-    fat: 65,
+    calories: 0,
+    protein: 0,
+    carbs: 0,
+    fat: 0,
   })
 
-  // Targets diarios (ejemplo)
-  const targets = {
+  const [editMode, setEditMode] = useState(false)
+  const [savingMetrics, setSavingMetrics] = useState(false)
+  const [loadingMetrics, setLoadingMetrics] = useState(true)
+  const [editNutritionMode, setEditNutritionMode] = useState(false)
+  const [savingNutrition, setSavingNutrition] = useState(false)
+
+  // Targets diarios (objetivos del usuario)
+  const [targets, setTargets] = useState({
     calories: 2000,
     protein: 150,
     carbs: 250,
     fat: 70,
-  }
+  })
+
+  // Cargar métricas del usuario y nutrición de hoy al montar el componente
+  useEffect(() => {
+    const loadData = async () => {
+      setLoadingMetrics(true)
+      
+      // Cargar información personal
+      const userMetrics = await getUserMetrics()
+      if (userMetrics) {
+        setData({
+          weight: userMetrics.weight,
+          height: userMetrics.height,
+          calories: data.calories,
+          protein: data.protein,
+          carbs: data.carbs,
+          fat: data.fat,
+        })
+        setTargets({
+          ...targets,
+          calories: userMetrics.calorie_goal,
+        })
+      }
+
+      // Cargar nutrición de hoy
+      const todayNutrition = await getTodayNutrition()
+      if (todayNutrition) {
+        setData((prev) => ({
+          ...prev,
+          calories: todayNutrition.calories,
+          protein: todayNutrition.protein,
+          carbs: todayNutrition.carbs,
+          fat: todayNutrition.fat,
+        }))
+      }
+
+      setLoadingMetrics(false)
+    }
+
+    loadData()
+  }, [])
 
   const getProgressPercentage = (current: number, target: number) => {
     return Math.min((current / target) * 100, 100)
+  }
+
+  const handleSaveMetrics = async () => {
+    setSavingMetrics(true)
+    const success = await saveUserMetrics({
+      weight: data.weight,
+      height: data.height,
+      calorie_goal: targets.calories,
+    })
+    if (success) {
+      setEditMode(false)
+      console.log("✅ Métricas guardadas exitosamente")
+    }
+    setSavingMetrics(false)
+  }
+
+  const handleEditTodayNutrition = async () => {
+    setSavingMetrics(true)
+    const updated = await saveTodayNutrition({
+      calories: data.calories,
+      protein: data.protein,
+      carbs: data.carbs,
+      fat: data.fat,
+    })
+    if (updated) {
+      setEditNutritionMode(false)
+      console.log("✅ Nutrición de hoy actualizada")
+    }
+    setSavingMetrics(false)
   }
 
   const NutritionCard = ({
@@ -153,71 +230,388 @@ const handleClearFiles = () => {
   console.log("🗑️ Archivos limpios")
 }
 
+const [showNutritionForm, setShowNutritionForm] = useState(false)
+const [newNutrition, setNewNutrition] = useState({
+  calories: 0,
+  protein: 0,
+  carbs: 0,
+  fat: 0,
+})
+const [savingNutritionForm, setSavingNutritionForm] = useState(false)
+
+const handleAddNutrition = async (e: React.FormEvent) => {
+  e.preventDefault()
+  setSavingNutritionForm(true)
+  
+  const updated = await saveTodayNutrition({
+    calories: data.calories + newNutrition.calories,
+    protein: data.protein + newNutrition.protein,
+    carbs: data.carbs + newNutrition.carbs,
+    fat: data.fat + newNutrition.fat,
+  })
+
+  if (updated) {
+    setData((prev) => ({
+      ...prev,
+      calories: updated.calories,
+      protein: updated.protein,
+      carbs: updated.carbs,
+      fat: updated.fat,
+    }))
+    setNewNutrition({ calories: 0, protein: 0, carbs: 0, fat: 0 })
+    setShowNutritionForm(false)
+    console.log("✅ Nutrición registrada")
+  }
+  
+  setSavingNutritionForm(false)
+}
+
 
   return (
     <div className="space-y-8">
       {/* Sección de Nutrición (visible solo si no es analyzer) */}
       {!showOnlyAnalyzer && (
         <div>
-          <h2 className="text-2xl font-bold text-foreground mb-6">
-            Today&apos;s Nutrition
-          </h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-foreground">
+              Today&apos;s Nutrition (Inicia en 0)
+            </h2>
+            <div className="flex gap-2">
+              {!showNutritionForm && (
+                <Button
+                  onClick={() => setShowNutritionForm(true)}
+                  variant="outline"
+                  size="sm"
+                >
+                  ➕ Registrar Comida
+                </Button>
+              )}
+              {!editNutritionMode && (
+                <Button
+                  onClick={() => setEditNutritionMode(true)}
+                  variant="outline"
+                  size="sm"
+                >
+                  ✏️ Editar
+                </Button>
+              )}
+            </div>
+          </div>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <NutritionCard
-            label="Calories"
-            current={data.calories}
-            target={targets.calories}
-            unit="kcal"
-          />
-          <NutritionCard
-            label="Protein"
-            current={data.protein}
-            target={targets.protein}
-            unit="g"
-          />
-          <NutritionCard
-            label="Carbs"
-            current={data.carbs}
-            target={targets.carbs}
-            unit="g"
-          />
-          <NutritionCard
-            label="Fat"
-            current={data.fat}
-            target={targets.fat}
-            unit="g"
-          />
+          {editNutritionMode ? (
+            <>
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">Calorías (kcal)</p>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={data.calories || ""}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setData({
+                      ...data,
+                      calories: val === "" ? 0 : parseInt(val) || 0,
+                    })
+                  }}
+                  className="w-full border rounded-md bg-background p-2 text-sm mb-3"
+                />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">Proteína (g)</p>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={data.protein || ""}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setData({
+                      ...data,
+                      protein: val === "" ? 0 : parseInt(val) || 0,
+                    })
+                  }}
+                  className="w-full border rounded-md bg-background p-2 text-sm mb-3"
+                />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">Carbos (g)</p>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={data.carbs || ""}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setData({
+                      ...data,
+                      carbs: val === "" ? 0 : parseInt(val) || 0,
+                    })
+                  }}
+                  className="w-full border rounded-md bg-background p-2 text-sm mb-3"
+                />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">Grasas (g)</p>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={data.fat || ""}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setData({
+                      ...data,
+                      fat: val === "" ? 0 : parseInt(val) || 0,
+                    })
+                  }}
+                  className="w-full border rounded-md bg-background p-2 text-sm mb-3"
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <NutritionCard
+                label="Calories"
+                current={data.calories}
+                target={targets.calories}
+                unit="kcal"
+              />
+              <NutritionCard
+                label="Protein"
+                current={data.protein}
+                target={targets.protein}
+                unit="g"
+              />
+              <NutritionCard
+                label="Carbs"
+                current={data.carbs}
+                target={targets.carbs}
+                unit="g"
+              />
+              <NutritionCard
+                label="Fat"
+                current={data.fat}
+                target={targets.fat}
+                unit="g"
+              />
+            </>
+          )}
         </div>
 
-        {/* Physical Metrics */}
-        <Card className="p-6 mb-8">
-          <h3 className="text-lg font-semibold text-foreground mb-4">
-            Physical Metrics
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Weight</p>
-              <p className="text-2xl font-bold text-foreground">{data.weight} kg</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Height</p>
-              <p className="text-2xl font-bold text-foreground">{data.height} cm</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">BMI</p>
-              <p className="text-2xl font-bold text-foreground">
-                {(data.weight / (data.height / 100) ** 2).toFixed(1)}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Calorie Goal</p>
-              <p className="text-2xl font-bold text-foreground">
-                {targets.calories}
-              </p>
-            </div>
+        {editNutritionMode && (
+          <div className="flex gap-2 mb-6">
+            <Button
+              onClick={handleEditTodayNutrition}
+              disabled={savingMetrics}
+              size="sm"
+            >
+              {savingMetrics ? "Guardando..." : "💾 Guardar"}
+            </Button>
+            <Button
+              onClick={() => setEditNutritionMode(false)}
+              variant="outline"
+              size="sm"
+            >
+              Cancelar
+            </Button>
           </div>
+        )}
+
+        {/* Formulario para agregar comida */}
+        {showNutritionForm && (
+          <Card className="p-4 mb-4 bg-muted">
+            <form onSubmit={handleAddNutrition} className="space-y-3">
+              <h4 className="text-sm font-semibold">Registrar Comida</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Calorías</p>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={newNutrition.calories || ""}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setNewNutrition({
+                        ...newNutrition,
+                        calories: val === "" ? 0 : parseInt(val) || 0,
+                      })
+                    }}
+                    className="w-full border rounded-md bg-background p-2 text-xs"
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Proteína (g)</p>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={newNutrition.protein || ""}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setNewNutrition({
+                        ...newNutrition,
+                        protein: val === "" ? 0 : parseInt(val) || 0,
+                      })
+                    }}
+                    className="w-full border rounded-md bg-background p-2 text-xs"
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Carbos (g)</p>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={newNutrition.carbs || ""}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setNewNutrition({
+                        ...newNutrition,
+                        carbs: val === "" ? 0 : parseInt(val) || 0,
+                      })
+                    }}
+                    className="w-full border rounded-md bg-background p-2 text-xs"
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Grasas (g)</p>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={newNutrition.fat || ""}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setNewNutrition({
+                        ...newNutrition,
+                        fat: val === "" ? 0 : parseInt(val) || 0,
+                      })
+                    }}
+                    className="w-full border rounded-md bg-background p-2 text-xs"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" size="sm" disabled={savingNutrition}>
+                  {savingNutrition ? "Guardando..." : "✅ Agregar"}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => setShowNutritionForm(false)}
+                  variant="outline"
+                  size="sm"
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </form>
+          </Card>
+        )}
+
+        <Card className="p-6 mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-foreground">
+              Tu Información Personal
+            </h3>
+            {!editMode ? (
+              <Button
+                onClick={() => setEditMode(true)}
+                variant="outline"
+                size="sm"
+              >
+                ✏️ Editar
+              </Button>
+            ) : null}
+          </div>
+
+          {editMode ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Peso (kg)</p>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={data.weight}
+                    onChange={(e) =>
+                      setData({ ...data, weight: parseFloat(e.target.value) || 0 })
+                    }
+                    className="w-full border rounded-md bg-background p-2 text-sm"
+                    placeholder="Ej: 75"
+                  />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Altura (cm)</p>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={data.height}
+                    onChange={(e) =>
+                      setData({ ...data, height: parseFloat(e.target.value) || 0 })
+                    }
+                    className="w-full border rounded-md bg-background p-2 text-sm"
+                    placeholder="Ej: 180"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Objetivo de Calorías Diarias</p>
+                <input
+                  type="number"
+                  value={targets.calories}
+                  onChange={(e) =>
+                    setTargets({
+                      ...targets,
+                      calories: parseInt(e.target.value) || 0,
+                    })
+                  }
+                  className="w-full border rounded-md bg-background p-2 text-sm"
+                  placeholder="Ej: 2000"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleSaveMetrics}
+                  disabled={savingMetrics}
+                  size="sm"
+                >
+                  {savingMetrics ? "Guardando..." : "💾 Guardar"}
+                </Button>
+                <Button
+                  onClick={() => setEditMode(false)}
+                  variant="outline"
+                  size="sm"
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Peso</p>
+                <p className="text-2xl font-bold text-foreground">{data.weight} kg</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Altura</p>
+                <p className="text-2xl font-bold text-foreground">{data.height} cm</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">IMC</p>
+                <p className="text-2xl font-bold text-foreground">
+                  {(data.weight / (data.height / 100) ** 2).toFixed(1)}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Meta Calorías</p>
+                <p className="text-2xl font-bold text-foreground">
+                  {targets.calories}
+                </p>
+              </div>
+            </div>
+          )}
         </Card>
         </div>
       )}

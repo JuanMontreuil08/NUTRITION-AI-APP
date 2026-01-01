@@ -1,0 +1,122 @@
+import { createNutritionClient } from "@/lib/supabase/nutrition-client"
+
+export interface UserMetrics {
+  id?: string
+  user_id: string
+  weight: number // kg
+  height: number // cm
+  calorie_goal: number
+  created_at?: string
+  updated_at?: string
+}
+
+/**
+ * Obtener métricas del usuario actual
+ */
+export async function getUserMetrics(): Promise<UserMetrics | null> {
+  try {
+    const supabase = createNutritionClient()
+
+    // Obtener usuario actual del proyecto de autenticación original
+    const authClient = await import("@/lib/supabase/client").then((m) =>
+      m.createClient()
+    )
+    const { data: { user }, error: authError } = await authClient.auth.getUser()
+    if (authError || !user) {
+      console.error("❌ No hay usuario autenticado")
+      return null
+    }
+
+    // Obtener métricas del usuario
+    const { data, error } = await supabase
+      .from("user_metrics")
+      .select("*")
+      .eq("user_id", user.id)
+      .single()
+
+    if (error) {
+      if (error.code === "PGRST116") {
+        // No existe registro, retornar null
+        console.log("ℹ️ No hay métricas guardadas para este usuario")
+        return null
+      }
+      console.error("❌ Error al obtener métricas:", error.message)
+      return null
+    }
+
+    console.log("✅ Métricas obtenidas:", data)
+    return data
+  } catch (err: any) {
+    console.error("❌ Error inesperado:", err.message)
+    return null
+  }
+}
+
+/**
+ * Guardar o actualizar métricas del usuario
+ */
+export async function saveUserMetrics(metrics: Omit<UserMetrics, "id" | "user_id" | "created_at" | "updated_at">): Promise<UserMetrics | null> {
+  try {
+    const supabase = createNutritionClient()
+
+    // Obtener usuario actual del proyecto de autenticación original
+    const authClient = await import("@/lib/supabase/client").then((m) =>
+      m.createClient()
+    )
+    const { data: { user }, error: authError } = await authClient.auth.getUser()
+    if (authError || !user) {
+      console.error("❌ No hay usuario autenticado")
+      return null
+    }
+
+    // Intentar actualizar primero
+    const { data: existingData } = await supabase
+      .from("user_metrics")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle()
+
+    let result
+    if (existingData) {
+      // Actualizar
+      const { data, error } = await supabase
+        .from("user_metrics")
+        .update({
+          ...metrics,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", user.id)
+        .select()
+        .single()
+
+      if (error) {
+        console.error("❌ Error al actualizar métricas:", error.message)
+        return null
+      }
+      result = data
+      console.log("✅ Métricas actualizadas:", result)
+    } else {
+      // Crear nuevo registro
+      const { data, error } = await supabase
+        .from("user_metrics")
+        .insert({
+          user_id: user.id,
+          ...metrics,
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error("❌ Error al guardar métricas:", error.message)
+        return null
+      }
+      result = data
+      console.log("✅ Métricas guardadas:", result)
+    }
+
+    return result
+  } catch (err: any) {
+    console.error("❌ Error inesperado:", err.message)
+    return null
+  }
+}

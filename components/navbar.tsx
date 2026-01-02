@@ -10,6 +10,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import ThemeToggle from "@/components/theme-toggle"
 
 type Tab = "tracker" | "recipes" | "analyzer"
 
@@ -42,45 +43,52 @@ export default function Navbar({ activeTab = "tracker", onTabChange }: NavbarPro
   ]
 
   return (
-    <nav className="border-b border-border bg-card sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 py-4">
-        <div className="flex items-center justify-between gap-4">
+    <nav className="sticky top-0 z-50 bg-gradient-to-b from-card to-card/95 border-b border-border/50 shadow-lg backdrop-blur-sm">
+      <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-2 sm:py-4">
+        {/* Primera fila - Logo y acciones rápidas */}
+        <div className="flex items-center justify-between gap-2 mb-2 sm:mb-0">
           {/* Logo */}
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <span className="text-2xl font-bold text-accent">🥗</span>
-            <span className="text-xl font-bold hidden sm:inline text-foreground">
+          <Link href="/dashboard" className="flex items-center gap-1 sm:gap-2 group flex-shrink-0">
+            <div className="relative">
+              <span className="text-2xl sm:text-3xl font-bold gradient-text">🥗</span>
+            </div>
+            <span className="text-sm sm:text-lg lg:text-xl font-bold hidden sm:inline bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
               NutritionAI
             </span>
           </Link>
 
-          {/* Tabs */}
-          <div className="flex items-center gap-1 flex-wrap justify-center flex-1">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => onTabChange?.(tab.id)}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  activeTab === tab.id
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                }`}
-              >
-                <span className="mr-2">{tab.icon}</span>
-                <span className="hidden sm:inline">{tab.label}</span>
-              </button>
-            ))}
+          {/* Acciones derecha - Responsive */}
+          <div className="flex items-center gap-1 sm:gap-2 ml-auto flex-shrink-0">
+            <ThemeToggle />
+            <Button
+              onClick={handleLogout}
+              disabled={isLoading}
+              variant="outline"
+              size="sm"
+              className="text-xs sm:text-sm px-2 sm:px-4"
+            >
+              {isLoading ? "⏳" : "🚪"}
+              <span className="hidden sm:inline ml-1">Salir</span>
+            </Button>
           </div>
+        </div>
 
-          {/* Logout */}
-          <Button
-            onClick={handleLogout}
-            disabled={isLoading}
-            variant="outline"
-            size="sm"
-            className="text-xs"
-          >
-            {isLoading ? "..." : "🚪 Salir"}
-          </Button>
+        {/* Segunda fila - Tabs (solo visible en SM+, escondido en móvil) */}
+        <div className="hidden sm:flex items-center gap-2 justify-center">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => onTabChange?.(tab.id)}
+              className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-300 flex items-center gap-2 whitespace-nowrap ${
+                activeTab === tab.id
+                  ? "bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-lg scale-105"
+                  : "text-muted-foreground hover:text-foreground hover:bg-primary/10 dark:hover:bg-primary/20"
+              }`}
+            >
+              <span>{tab.icon}</span>
+              <span>{tab.label}</span>
+            </button>
+          ))}
         </div>
       </div>
     </nav>
